@@ -3,6 +3,7 @@ local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
@@ -10,16 +11,18 @@ local Mouse = LocalPlayer:GetMouse()
 -- ==========================================
 -- 🔗 CONEXIÓN CON EL JUEGO (REMOTES)
 -- ==========================================
--- Buscamos la ruta exacta que mostraste en los logs
 local PlotSystem = ReplicatedStorage:WaitForChild("Connections"):WaitForChild("Remotes"):WaitForChild("PlotSystem")
 
 -- ==========================================
--- ⚙️ CONFIGURACIÓN
+-- ⚙️ CONFIGURACIÓN (AJUSTES DE VELOCIDAD)
 -- ==========================================
 local CARPETA_PRINCIPAL = "MisConstruccionesRoblox" 
-local RADIO_HORIZONTAL = 40 
-local TRANSPARENCIA_MOLDE = 0.5 
-local TIEMPO_ESPERA_ENTRE_BLOQUES = 0.2 -- Aumentado ligeramente para dar tiempo al servidor
+local RADIO_HORIZONTAL = 60 -- Aumentado para capturar casas grandes
+local TRANSPARENCIA_MOLDE = 0.6 
+
+-- ⚠️ IMPORTANTE: Si ves que faltan bloques, aumenta estos números
+local PAUSA_ENTRE_BLOQUES = 0.25  -- Tiempo entre poner un bloque y el siguiente
+local PAUSA_ANTES_DE_ESCALAR = 0.4 -- Tiempo CRÍTICO: Espera para que el server registre el bloque antes de cambiar tamaño
 
 if not isfolder(CARPETA_PRINCIPAL) then makefolder(CARPETA_PRINCIPAL) end
 
@@ -31,18 +34,18 @@ local menuAbierto = true
 -- Herramienta
 local tool = Instance.new("Tool")
 tool.RequiresHandle = false
-tool.Name = "📐 Gestor (Click para abrir)"
+tool.Name = "📐 Gestor PRO (Click)"
 tool.Parent = LocalPlayer.Backpack
 
 -- Selección Visual
 local highlightBox = Instance.new("SelectionBox")
-highlightBox.Color3 = Color3.fromRGB(0, 255, 255)
+highlightBox.Color3 = Color3.fromRGB(255, 170, 0)
 highlightBox.LineThickness = 0.05
 highlightBox.Parent = workspace
 highlightBox.Adornee = nil
 
 -- ==========================================
--- 🖥️ GUI (DISEÑO MEJORADO)
+-- 🖥️ GUI
 -- ==========================================
 if CoreGui:FindFirstChild("ClonadorProGUI") then CoreGui.ClonadorProGUI:Destroy() end
 
@@ -52,7 +55,7 @@ if syn and syn.protect_gui then syn.protect_gui(screenGui)
 elseif gethui then screenGui.Parent = gethui()
 else screenGui.Parent = CoreGui end
 
--- [ ... SECCIÓN GUI IDÉNTICA A TU SCRIPT ORIGINAL ... ]
+-- Botón Toggle
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Name = "ToggleMenu"
 toggleBtn.Size = UDim2.new(0, 45, 0, 45)
@@ -64,6 +67,7 @@ toggleBtn.TextColor3 = Color3.new(1,1,1)
 toggleBtn.Parent = screenGui
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 10)
 
+-- Panel Principal
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 230, 0, 380) 
@@ -72,6 +76,7 @@ mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
+-- Barra Superior
 local topBar = Instance.new("Frame")
 topBar.Size = UDim2.new(1, 0, 0, 35)
 topBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -79,7 +84,7 @@ topBar.Parent = mainFrame
 Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 10)
 
 local title = Instance.new("TextLabel")
-title.Text = "🏗️ CONSTRUCTOR PRO"
+title.Text = "🏗️ CONSTRUCTOR V6"
 title.Size = UDim2.new(0.8, 0, 1, 0)
 title.Position = UDim2.new(0.05, 0, 0, 0)
 title.BackgroundTransparency = 1
@@ -89,6 +94,7 @@ title.TextSize = 14
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = topBar
 
+-- Inputs y Listas
 local nameInput = Instance.new("TextBox")
 nameInput.PlaceholderText = "Nombre archivo..."
 nameInput.Size = UDim2.new(0.65, 0, 0, 30)
@@ -127,7 +133,7 @@ local layoutActions = Instance.new("UIListLayout")
 layoutActions.Padding = UDim.new(0, 6)
 layoutActions.Parent = actionsFrame
 
--- Funciones GUI básicas
+-- Funciones GUI
 local function hacerArrastrable(frameDrag, frameMover)
     local dragging, dragInput, dragStart, startPos
     frameDrag.InputBegan:Connect(function(input)
@@ -144,9 +150,7 @@ local function hacerArrastrable(frameDrag, frameMover)
             frameMover.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
-    UserInputService.InputEnded:Connect(function(input)
-         if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
+    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
 end
 hacerArrastrable(topBar, mainFrame)
 
@@ -160,14 +164,9 @@ function notificar(texto)
     game:GetService("StarterGui"):SetCore("SendNotification", {Title="Constructor", Text=texto, Duration=2})
 end
 
--- ==========================================
--- 🧠 LÓGICA & FUNCIONES
--- ==========================================
-
 function redondearCFrame(cf)
     local x, y, z = cf.X, cf.Y, cf.Z
     local rX, rY, rZ = math.round(x*100)/100, math.round(y*100)/100, math.round(z*100)/100
-    -- Redondear rotación es complejo, lo mantenemos simple por ahora
     return CFrame.new(rX, rY, rZ) * (cf - cf.Position)
 end
 
@@ -193,7 +192,7 @@ function actualizarListaArchivos()
             btnLoad.MouseButton1Click:Connect(function()
                 local contenido = readfile(rutaCompleta)
                 datosGuardados = HttpService:JSONDecode(contenido)
-                notificar("📂 Cargado: " .. #datosGuardados .. " objetos")
+                notificar("📂 Cargado: " .. #datosGuardados .. " piezas")
             end)
             
             local btnDel = Instance.new("TextButton")
@@ -210,24 +209,25 @@ function actualizarListaArchivos()
 end
 
 btnSave.MouseButton1Click:Connect(function()
-    if #datosGuardados == 0 then return notificar("⚠️ Vacío") end
+    if #datosGuardados == 0 then return notificar("⚠️ Nada para guardar") end
     local nombre = nameInput.Text
-    if nombre == "" then return notificar("⚠️ Falta nombre") end
+    if nombre == "" then return notificar("⚠️ Escribe un nombre") end
     writefile(CARPETA_PRINCIPAL .. "/" .. nombre .. ".json", HttpService:JSONEncode(datosGuardados))
-    notificar("💾 Guardado")
-    nameInput.Text = ""
+    notificar("💾 Guardado Exitoso")
     actualizarListaArchivos()
 end)
 
+-- ==========================================
+-- 🔍 VALIDACIÓN Y ROTACIÓN
+-- ==========================================
 function esBloqueValido(part)
-    -- Intenta filtrar solo las partes que parecen muebles
-    -- Ajusta esto según el juego. Aquí evitamos el Terreno y el Baseplate.
+    -- Ajuste para detectar cubos y estructuras del usuario
     return part:IsA("BasePart") 
            and part.Name ~= "Baseplate" 
            and part.Transparency < 1 
            and not part.Parent:FindFirstChild("Humanoid") 
            and not part.Name:find("Ghost_")
-           and part.Parent.Name ~= "Terrenos" -- Evita copiar el suelo del juego
+           and part.Parent.Name ~= "Terrenos"
 end
 
 function obtenerRotacionJugador()
@@ -241,41 +241,44 @@ function obtenerRotacionJugador()
 end
 
 -- ==========================================
--- 🏗️ LÓGICA DE CONSTRUCCIÓN REAL (MODIFICADA)
+-- 🏗️ LÓGICA DE CONSTRUCCIÓN CRÍTICA
 -- ==========================================
+
 function colocarBloqueReal(nombreItem, cframePosicion, sizeObjetivo)
-    -- Aquí ocurre la magia con los datos que me diste
-    
-    -- 1. Argumentos para colocar (placeFurniture)
+    -- 1. Intentar colocar el mueble
     local argsPlace = {
         [1] = "placeFurniture",
-        [2] = nombreItem, -- Ej: "part_cube"
+        [2] = nombreItem, 
         [3] = cframePosicion
     }
     
-    -- Usamos InvokeServer porque esperamos que devuelva el ID del mueble
-    -- Envuelve en pcall para que no crashee si falla
     local exito, furnitureID = pcall(function() 
         return PlotSystem:InvokeServer(unpack(argsPlace))
     end)
     
+    -- 2. Si se colocó, esperamos y luego escalamos
     if exito and furnitureID then
-        -- Si obtuvimos un ID válido, procedemos a escalarlo
         
-        -- Verificamos si realmente necesitamos escalar (evitar llamadas innecesarias si es tamaño 1,1,1)
-        -- Aunque en este juego parece que "part_cube" siempre necesita escalar.
+        -- PAUSA CRÍTICA: Esperar a que el servidor cree la parte antes de modificarla
+        task.wait(PAUSA_ANTES_DE_ESCALAR) 
         
-        local argsScale = {
-            [1] = "scaleFurniture",
-            [2] = furnitureID, -- El UUID que nos devolvió el servidor
-            [3] = cframePosicion,
-            [4] = sizeObjetivo -- El Vector3 del tamaño guardado
-        }
-        
-        PlotSystem:InvokeServer(unpack(argsScale))
-        print("✅ Colocado y Escalado:", nombreItem, furnitureID)
+        -- Verificación de seguridad: ¿Necesitamos escalar?
+        -- Si el tamaño objetivo es muy pequeño (1,1,1) quizás no sea necesario, pero igual lo mandamos por seguridad
+        if sizeObjetivo.X > 0 and sizeObjetivo.Y > 0 then
+            local argsScale = {
+                [1] = "scaleFurniture",
+                [2] = furnitureID, -- UUID devuelto por el servidor
+                [3] = cframePosicion,
+                [4] = sizeObjetivo -- Vector3 con el tamaño real capturado
+            }
+            
+            pcall(function()
+                PlotSystem:InvokeServer(unpack(argsScale))
+            end)
+            print("✅ OK: " .. nombreItem .. " | ID: " .. tostring(furnitureID) .. " | Size: " .. tostring(sizeObjetivo))
+        end
     else
-        warn("❌ Fallo al colocar:", nombreItem)
+        warn("❌ Fallo Place: " .. nombreItem)
     end
 end
 
@@ -286,59 +289,65 @@ function copiarEstructura()
     local origenCFrame = centroPart.CFrame
     local count = 0
     
-    -- Escaneamos workspace. SUGERENCIA: Si puedes, cambia workspace:GetDescendants()
-    -- por la carpeta específica de muebles si la conoces (ej. workspace.Terrenos.Folder...)
     for _, part in pairs(workspace:GetDescendants()) do
         if esBloqueValido(part) then
             local dist = (Vector3.new(part.Position.X, 0, part.Position.Z) - Vector3.new(origenCFrame.Position.X, 0, origenCFrame.Position.Z)).Magnitude
             if dist <= RADIO_HORIZONTAL then
                 local cframeRelativo = origenCFrame:Inverse() * part.CFrame
                 
-                -- Guardamos el nombre real del item (ej. "part_cube")
-                -- A veces el nombre de la Part no es el nombre del Item.
-                -- Si falla, revisa si part.Parent.Name es el correcto.
+                -- LÓGICA DE NOMBRE: Buscar el nombre correcto del mueble
                 local nombreGuardar = part.Name
-                if part.Parent:IsA("Model") then
-                     -- Ajuste por si la parte está dentro de un modelo llamado "part_cube"
-                     if part.Parent.Name:find("part_") or part.Parent.Name:find("Furniture") then
-                         nombreGuardar = part.Parent.Name 
+                -- Si la parte es un hijo (ej. "Hitbox" dentro de "Silla"), intentamos coger el nombre del modelo padre
+                if part.Parent:IsA("Model") and not part.Parent:FindFirstChild("Humanoid") then
+                     if part.Parent.Name ~= "Folder" and part.Parent.Name ~= "FurnitureContainer" then
+                         nombreGuardar = part.Parent.Name
                      end
                 end
+                
+                -- Forzar nombre "part_cube" si parece un bloque de construcción genérico
+                if nombreGuardar == "Part" or nombreGuardar == "Union" then
+                    nombreGuardar = "part_cube" 
+                end
 
+                -- AQUÍ GUARDAMOS EL TAMAÑO EXACTO (SIZE)
                 table.insert(datosGuardados, {
                     Name = nombreGuardar, 
                     Color = {part.Color.R, part.Color.G, part.Color.B}, 
                     Mat = part.Material.Name, 
-                    Size = {part.Size.X, part.Size.Y, part.Size.Z}, 
+                    Size = {part.Size.X, part.Size.Y, part.Size.Z}, -- <--- ESTO ES LO IMPORTANTE
                     CF = {cframeRelativo:GetComponents()}
                 })
                 count = count + 1
             end
         end
     end
-    notificar("✅ Copiados: " .. count)
+    notificar("✅ Copiados: " .. count .. " elementos")
 end
 
 function pegarEstructura()
-    if not bloqueSeleccionado then return notificar("⚠️ Selecciona dónde pegar (click)") end
-    if #datosGuardados == 0 then return notificar("⚠️ Archivo vacío") end
+    if not bloqueSeleccionado then return notificar("⚠️ Click en el suelo donde pegar") end
+    if #datosGuardados == 0 then return notificar("⚠️ Carga un archivo primero") end
     
     local rotacionDeseada = obtenerRotacionJugador()
-    -- Ajustamos la altura para que no quede enterrado (opcional)
     local nuevoCentroCFrame = CFrame.new(bloqueSeleccionado.Position + Vector3.new(0, 1, 0)) * rotacionDeseada
     
-    notificar("🏗️ Construyendo...")
+    notificar("🏗️ Construyendo " .. #datosGuardados .. " bloques...")
     
+    -- Recorremos la lista de bloques guardados
     for i, data in pairs(datosGuardados) do
+        
+        -- Reconstruir Posición
         local relCF = CFrame.new(unpack(data.CF))
         local cframeFinal = nuevoCentroCFrame * relCF
         cframeFinal = redondearCFrame(cframeFinal)
+        
+        -- Reconstruir Tamaño
         local sizeVector = Vector3.new(unpack(data.Size))
         
-        -- 1. Crear fantasma visual (Cliente)
+        -- 1. Feedback Visual (Fantasma)
         local ghost = Instance.new("Part")
-        ghost.Name = "Ghost_" .. data.Name
-        ghost.Size = sizeVector
+        ghost.Name = "Ghost_Build"
+        ghost.Size = sizeVector -- El fantasma tendrá el tamaño correcto visualmente
         ghost.CFrame = cframeFinal
         ghost.Color = Color3.new(unpack(data.Color))
         ghost.Material = Enum.Material[data.Mat] or Enum.Material.Plastic
@@ -348,12 +357,13 @@ function pegarEstructura()
         ghost.Parent = workspace
         table.insert(fantasmasCreados, ghost)
         
-        -- 2. Llamar al servidor para construir de verdad
-        task.spawn(function() 
-            colocarBloqueReal(data.Name, cframeFinal, sizeVector) 
+        -- 2. Ejecución Real (Enrutada a otro hilo para no congelar)
+        task.spawn(function()
+            colocarBloqueReal(data.Name, cframeFinal, sizeVector)
         end)
         
-        if TIEMPO_ESPERA_ENTRE_BLOQUES > 0 then task.wait(TIEMPO_ESPERA_ENTRE_BLOQUES) end
+        -- PAUSA ENTRE BLOQUES: Evita saturar al servidor (Rate Limit)
+        if PAUSA_ENTRE_BLOQUES > 0 then task.wait(PAUSA_ENTRE_BLOQUES) end
     end
     notificar("✅ Proceso terminado")
 end
@@ -363,7 +373,7 @@ function limpiarFantasmas()
     fantasmasCreados = {}
     bloqueSeleccionado = nil
     highlightBox.Adornee = nil
-    notificar("🗑️ Visual limpiado")
+    notificar("🗑️ Limpieza completa")
 end
 
 function vaciarMemoria()
@@ -371,7 +381,7 @@ function vaciarMemoria()
     notificar("♻️ Memoria vacía")
 end
 
--- Generador de botones
+-- Botones
 local function crearBoton(texto, color, orden, func)
     local btn = Instance.new("TextButton")
     btn.Text = texto
@@ -387,21 +397,16 @@ end
 
 crearBoton("🎯 COPIAR (K)", Color3.fromRGB(0, 150, 100), 1, copiarEstructura)
 crearBoton("🏗️ PEGAR (V)", Color3.fromRGB(0, 100, 200), 2, pegarEstructura)
-crearBoton("🧹 LIMPIAR VISUAL (X)", Color3.fromRGB(200, 120, 0), 3, limpiarFantasmas)
-crearBoton("♻️ VACIAR MEMORIA (Z)", Color3.fromRGB(150, 0, 0), 4, vaciarMemoria)
+crearBoton("🧹 LIMPIAR (X)", Color3.fromRGB(200, 120, 0), 3, limpiarFantasmas)
+crearBoton("♻️ BORRAR DATOS (Z)", Color3.fromRGB(150, 0, 0), 4, vaciarMemoria)
 
 tool.Equipped:Connect(function(mouse)
     actualizarListaArchivos()
     mouse.Button1Down:Connect(function()
-        if mouse.Target and esBloqueValido(mouse.Target) then
+        if mouse.Target then
             bloqueSeleccionado = mouse.Target
             highlightBox.Adornee = bloqueSeleccionado
-            notificar("🎯 " .. bloqueSeleccionado.Name)
-        elseif mouse.Target then
-            -- Permitir seleccionar el suelo para pegar, aunque no sea un mueble
-            bloqueSeleccionado = mouse.Target
-            highlightBox.Adornee = bloqueSeleccionado
-            notificar("🎯 Punto Base: " .. bloqueSeleccionado.Name)
+            notificar("🎯 Punto: " .. bloqueSeleccionado.Name)
         end
     end)
     mouse.KeyDown:Connect(function(key)
@@ -416,4 +421,4 @@ end)
 
 tool.Unequipped:Connect(function() highlightBox.Adornee = nil bloqueSeleccionado = nil end)
 actualizarListaArchivos()
-notificar("✅ Script v5.0 (Auto-Build Activado)")
+notificar("✅ V6.0 LISTO: Corrección de Tamaño Activa")
