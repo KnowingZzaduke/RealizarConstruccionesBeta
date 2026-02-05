@@ -4,6 +4,7 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris") -- Agregado para limpiar visuales
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
@@ -21,7 +22,7 @@ local PlotSystem = Remotes:WaitForChild("PlotSystem")
 local CARPETA_PRINCIPAL = "MisConstruccionesRoblox" 
 local RADIO_HORIZONTAL = 40 
 local TRANSPARENCIA_MOLDE = 0.5 
-local TIEMPO_SEGURIDAD = 0.3 -- TIEMPO CRÍTICO: Espera antes de cambiar el tamaño
+local TIEMPO_SEGURIDAD = 0.3
 local BLOQUE_GENERICO = "part_cube" 
 
 if not isfolder(CARPETA_PRINCIPAL) then makefolder(CARPETA_PRINCIPAL) end
@@ -35,7 +36,7 @@ local procesoActivo = false
 -- Herramienta
 local tool = Instance.new("Tool")
 tool.RequiresHandle = false
-tool.Name = "📐 Gestor v8"
+tool.Name = "📐 Gestor v8 (Hunter)" -- Actualizado nombre
 tool.Parent = LocalPlayer.Backpack
 
 -- Selección Visual
@@ -236,6 +237,34 @@ function obtenerRotacionJugador()
 end
 
 -- ==========================================
+-- 🕵️‍♂️ FUNCIONES "HUNTER" (NUEVAS)
+-- ==========================================
+
+function encontrarBloqueEnPosicion(posicionCFrame)
+    -- Escanea en un radio muy pequeño (0.8 studs) alrededor de donde pusimos el bloque
+    local partesCercanas = workspace:GetPartBoundsInRadius(posicionCFrame.Position, 0.8)
+    
+    for _, parte in pairs(partesCercanas) do
+        -- Busca el bloque que coincida con el nombre genérico
+        if parte:IsA("BasePart") and parte.Name == BLOQUE_GENERICO then
+            return parte
+        end
+    end
+    return nil
+end
+
+function obtenerIDReal(parte)
+    -- Intenta todas las variantes posibles de atributos donde los tycoons guardan IDs
+    if parte:GetAttribute("ID") then return parte:GetAttribute("ID") end
+    if parte:GetAttribute("ItemId") then return parte:GetAttribute("ItemId") end
+    if parte:GetAttribute("UUID") then return parte:GetAttribute("UUID") end
+    if parte:GetAttribute("DataId") then return parte:GetAttribute("DataId") end
+    
+    -- Si no tiene atributo, devuelve la parte misma (a veces el script acepta la instancia)
+    return parte
+end
+
+-- ==========================================
 -- 🛠️ FUNCIONES DE COPIAR Y CONSTRUIR
 -- ==========================================
 
@@ -255,7 +284,7 @@ function copiarEstructura()
     esfera.Anchored = true
     esfera.CanCollide = false
     esfera.Parent = workspace
-    game:GetService("Debris"):AddItem(esfera, 1)
+    Debris:AddItem(esfera, 1)
 
     for _, part in pairs(workspace:GetDescendants()) do
         if esBloqueValido(part) and part ~= esfera then
@@ -267,7 +296,7 @@ function copiarEstructura()
                     Name = BLOQUE_GENERICO, 
                     Color = {part.Color.R, part.Color.G, part.Color.B}, 
                     Mat = part.Material.Name, 
-                    Size = {part.Size.X, part.Size.Y, part.Size.Z}, -- GUARDA TAMAÑO
+                    Size = {part.Size.X, part.Size.Y, part.Size.Z}, 
                     CF = {cframeRelativo:GetComponents()}
                 })
                 count = count + 1
@@ -307,7 +336,7 @@ function verMolde()
 end
 
 -- ==========================================
--- 🚀 FUNCIÓN CRÍTICA CORREGIDA (DEBUG MODE)
+-- 🚀 LÓGICA CONSTRUCTOR v8 "HUNTER"
 -- ==========================================
 function construirReal()
     if not bloqueSeleccionado then return notificar("⚠️ Selecciona el suelo base") end
@@ -319,7 +348,7 @@ function construirReal()
     if not hrp then return end
 
     procesoActivo = true
-    notificar("🔨 Construyendo... (Mira F9 si falla)")
+    notificar("🔨 Cazando Bloques...")
     
     local rotacionDeseada = obtenerRotacionJugador()
     local nuevoCentroCFrame = CFrame.new(bloqueSeleccionado.Position + Vector3.new(0,1,0)) * rotacionDeseada
@@ -330,50 +359,52 @@ function construirReal()
     for i, data in pairs(datosGuardados) do
         if not procesoActivo then break end 
 
-        -- 1. Calcular posición final
+        -- 1. Calcular coordenadas
         local relCF = CFrame.new(unpack(data.CF))
         local cframeFinal = nuevoCentroCFrame * relCF
         cframeFinal = redondearCFrame(cframeFinal)
-        
-        -- Vector3 del tamaño deseado
         local sizeObjetivo = Vector3.new(unpack(data.Size))
         
-        -- 2. Teletransportarse
+        -- 2. Teleport
         hrp.CFrame = cframeFinal * CFrame.new(0, 5, 0)
         RunService.Heartbeat:Wait()
 
-        -- 3. COLOCAR EL MUEBLE
-        local exitoPlace, idMueble = pcall(function()
-            return PlotSystem:InvokeServer("placeFurniture", BLOQUE_GENERICO, cframeFinal)
+        -- 3. COLOCAR (PlaceFurniture) - Ignoramos el retorno
+        pcall(function()
+            PlotSystem:InvokeServer("placeFurniture", BLOQUE_GENERICO, cframeFinal)
         end)
         
-        -- 4. VALIDAR ID Y ESCALAR
-        if exitoPlace then
-            if type(idMueble) == "string" then
-                -- ÉXITO: Tenemos el ID (UUID)
-                print("✅ Bloque " .. i .. " ID: " .. idMueble .. " | Intentando escalar a: " .. tostring(sizeObjetivo))
-                
-                -- ESPERA DE SEGURIDAD (El servidor necesita procesar que el bloque existe)
-                task.wait(TIEMPO_SEGURIDAD)
-                
-                local exitoScale, errScale = pcall(function()
-                    PlotSystem:InvokeServer("scaleFurniture", idMueble, cframeFinal, sizeObjetivo)
-                end)
-                
-                if not exitoScale then
-                    warn("❌ Fallo Scale Bloque " .. i .. ": " .. tostring(errScale))
-                end
-            else
-                -- FALLO: El servidor devolvió algo raro (o nil)
-                warn("⚠️ Bloque " .. i .. " colocado, pero ID inválido: " .. tostring(idMueble))
-                -- Intento desesperado: buscar el bloque más cercano si no nos dio ID (opcional, por ahora solo warn)
-            end
+        -- 4. 🕵️‍♂️ EL MODO CAZADOR (HUNTER)
+        local bloqueEncontrado = nil
+        local intentos = 0
+        
+        -- Bucle de búsqueda (espera hasta 1 segundo a que aparezca el bloque)
+        while not bloqueEncontrado and intentos < 10 do
+            task.wait(0.1) -- Esperamos a que el servidor replique el bloque
+            bloqueEncontrado = encontrarBloqueEnPosicion(cframeFinal)
+            intentos = intentos + 1
+        end
+
+        -- 5. SI LO ENCONTRAMOS -> ESCALAR
+        if bloqueEncontrado then
+            local idParaEnviar = obtenerIDReal(bloqueEncontrado)
+            
+            -- Feedback visual: Caja verde temporal si lo encuentra
+            local box = Instance.new("SelectionBox")
+            box.Color3 = Color3.new(0, 1, 0)
+            box.Adornee = bloqueEncontrado
+            box.Parent = workspace
+            Debris:AddItem(box, 0.5)
+
+            -- Enviamos la orden de escalar con el ID que robamos del bloque físico
+            pcall(function()
+                PlotSystem:InvokeServer("scaleFurniture", idParaEnviar, cframeFinal, sizeObjetivo)
+            end)
         else
-            warn("❌ Fallo Place Bloque " .. i .. ": " .. tostring(idMueble))
+            warn("❌ Bloque " .. i .. ": No apareció en el Workspace (Lag o error)")
         end
         
-        -- Espera entre bloques (para no saturar)
-        task.wait(0.1)
+        task.wait(0.1) -- Pequeña pausa entre bloques
     end
     
     hrp.Anchored = false
@@ -441,4 +472,4 @@ end)
 
 tool.Unequipped:Connect(function() highlightBox.Adornee = nil bloqueSeleccionado = nil end)
 actualizarListaArchivos()
-notificar("✅ Script v8 (Debug + Wait)")
+notificar("✅ Script v8 (Hunter Mode)")
