@@ -4,6 +4,7 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
@@ -20,9 +21,12 @@ local PlotSystem = Remotes:WaitForChild("PlotSystem")
 -- ==========================================
 local CARPETA_PRINCIPAL = "MisConstruccionesRoblox" 
 local RADIO_HORIZONTAL = 40 
-local TRANSPARENCIA_MOLDE = 0.5 
-local TIEMPO_SEGURIDAD = 0.3 -- TIEMPO CRÍTICO: Espera antes de cambiar el tamaño
+local TIEMPO_ESPERA_ENTRE_BLOQUES = 0.25
+local TIEMPO_BUSQUEDA = 0.6 -- Tiempo que damos al bloque para aparecer antes de buscarlo
 local BLOQUE_GENERICO = "part_cube" 
+
+-- Según tu foto, los bloques aparecen aquí. Si falla, pon solo workspace
+local CARPETA_BUSQUEDA = workspace:WaitForChild("Terrenos") 
 
 if not isfolder(CARPETA_PRINCIPAL) then makefolder(CARPETA_PRINCIPAL) end
 
@@ -35,7 +39,7 @@ local procesoActivo = false
 -- Herramienta
 local tool = Instance.new("Tool")
 tool.RequiresHandle = false
-tool.Name = "📐 Gestor v8"
+tool.Name = "📐 Gestor v9 (Finder)"
 tool.Parent = LocalPlayer.Backpack
 
 -- Selección Visual
@@ -46,7 +50,7 @@ highlightBox.Parent = workspace
 highlightBox.Adornee = nil
 
 -- ==========================================
--- 🖥️ GUI (DISEÑO INTOCABLE)
+-- 🖥️ GUI
 -- ==========================================
 if CoreGui:FindFirstChild("ClonadorProGUI") then CoreGui.ClonadorProGUI:Destroy() end
 
@@ -82,7 +86,7 @@ topBar.Parent = mainFrame
 Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 10)
 
 local title = Instance.new("TextLabel")
-title.Text = "🏗️ CONSTRUCTOR v8"
+title.Text = "🏗️ CONSTRUCTOR v9"
 title.Size = UDim2.new(0.8, 0, 1, 0)
 title.Position = UDim2.new(0.05, 0, 0, 0)
 title.BackgroundTransparency = 1
@@ -130,7 +134,7 @@ local layoutActions = Instance.new("UIListLayout")
 layoutActions.Padding = UDim.new(0, 6)
 layoutActions.Parent = actionsFrame
 
--- Funciones Básicas GUI
+-- Funciones GUI
 local function hacerArrastrable(frameDrag, frameMover)
     local dragging, dragInput, dragStart, startPos
     frameDrag.InputBegan:Connect(function(input)
@@ -222,7 +226,7 @@ function esBloqueValido(part)
            and part.Transparency < 1 
            and not part.Parent:FindFirstChild("Humanoid") 
            and not part.Name:find("Ghost_")
-           and part.Parent.Name ~= "Terrenos"
+           and part.Parent.Name ~= "Terrenos" -- Evita copiar el suelo base
 end
 
 function obtenerRotacionJugador()
@@ -236,11 +240,11 @@ function obtenerRotacionJugador()
 end
 
 -- ==========================================
--- 🛠️ FUNCIONES DE COPIAR Y CONSTRUIR
+-- 🛠️ FUNCIONES NUEVAS (LA SOLUCIÓN)
 -- ==========================================
 
 function copiarEstructura()
-    if not bloqueSeleccionado then return notificar("⚠️ Selecciona un bloque central") end
+    if not bloqueSeleccionado then return notificar("⚠️ Selecciona centro") end
     local centroPart = bloqueSeleccionado
     datosGuardados = {}
     local origenCFrame = centroPart.CFrame
@@ -255,19 +259,16 @@ function copiarEstructura()
     esfera.Anchored = true
     esfera.CanCollide = false
     esfera.Parent = workspace
-    game:GetService("Debris"):AddItem(esfera, 1)
+    Debris:AddItem(esfera, 1)
 
     for _, part in pairs(workspace:GetDescendants()) do
         if esBloqueValido(part) and part ~= esfera then
             local dist = (Vector3.new(part.Position.X, 0, part.Position.Z) - Vector3.new(origenCFrame.Position.X, 0, origenCFrame.Position.Z)).Magnitude
             if dist <= RADIO_HORIZONTAL then
                 local cframeRelativo = origenCFrame:Inverse() * part.CFrame
-                
                 table.insert(datosGuardados, {
                     Name = BLOQUE_GENERICO, 
-                    Color = {part.Color.R, part.Color.G, part.Color.B}, 
-                    Mat = part.Material.Name, 
-                    Size = {part.Size.X, part.Size.Y, part.Size.Z}, -- GUARDA TAMAÑO
+                    Size = {part.Size.X, part.Size.Y, part.Size.Z}, -- IMPORTANTE: Guardamos tamaño
                     CF = {cframeRelativo:GetComponents()}
                 })
                 count = count + 1
@@ -279,14 +280,13 @@ end
 
 function verMolde()
     if not bloqueSeleccionado then return notificar("⚠️ Selecciona destino") end
-    if #datosGuardados == 0 then return notificar("⚠️ Archivo vacío") end
-    
+    if #datosGuardados == 0 then return notificar("⚠️ Nada copiado") end
     limpiarFantasmas()
     
     local rotacionDeseada = obtenerRotacionJugador()
     local nuevoCentroCFrame = CFrame.new(bloqueSeleccionado.Position + Vector3.new(0,1,0)) * rotacionDeseada
     
-    notificar("👁️ Mostrando Molde...")
+    notificar("👁️ Visualizando...")
     for _, data in pairs(datosGuardados) do
         local relCF = CFrame.new(unpack(data.CF))
         local cframeFinal = nuevoCentroCFrame * relCF
@@ -307,79 +307,91 @@ function verMolde()
 end
 
 -- ==========================================
--- 🚀 FUNCIÓN CRÍTICA CORREGIDA (DEBUG MODE)
+-- 🕵️‍♂️ FUNCIÓN BUSCADORA DE BLOQUES
 -- ==========================================
+function buscarBloqueReciente(posicionEsperada)
+    -- Escaneamos la carpeta donde el juego guarda las cosas
+    -- Usamos GetDescendants por si está dentro de subcarpetas
+    for _, part in pairs(CARPETA_BUSQUEDA:GetDescendants()) do
+        if part.Name == BLOQUE_GENERICO and part:IsA("BasePart") then
+            -- Verificamos si está muy cerca de donde lo pusimos (margen de 0.5 studs)
+            if (part.Position - posicionEsperada.Position).Magnitude < 0.5 then
+                return part
+            end
+        end
+    end
+    return nil
+end
+
 function construirReal()
-    if not bloqueSeleccionado then return notificar("⚠️ Selecciona el suelo base") end
-    if #datosGuardados == 0 then return notificar("⚠️ No hay datos cargados") end
-    if procesoActivo then return notificar("⚠️ Ya construyendo...") end
+    if not bloqueSeleccionado then return notificar("⚠️ Selecciona base") end
+    if #datosGuardados == 0 then return notificar("⚠️ Carga un archivo") end
+    if procesoActivo then return notificar("⚠️ Ya ocupado...") end
     
     local character = LocalPlayer.Character
     local hrp = character and character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
     procesoActivo = true
-    notificar("🔨 Construyendo... (Mira F9 si falla)")
+    notificar("🔨 Construyendo... (Modo Buscador)")
     
     local rotacionDeseada = obtenerRotacionJugador()
     local nuevoCentroCFrame = CFrame.new(bloqueSeleccionado.Position + Vector3.new(0,1,0)) * rotacionDeseada
-    
     local posOriginal = hrp.CFrame 
     hrp.Anchored = true 
 
     for i, data in pairs(datosGuardados) do
         if not procesoActivo then break end 
 
-        -- 1. Calcular posición final
+        -- 1. Calcular dónde va
         local relCF = CFrame.new(unpack(data.CF))
         local cframeFinal = nuevoCentroCFrame * relCF
         cframeFinal = redondearCFrame(cframeFinal)
-        
-        -- Vector3 del tamaño deseado
         local sizeObjetivo = Vector3.new(unpack(data.Size))
         
-        -- 2. Teletransportarse
+        -- 2. Teleport (Anti-cheat)
         hrp.CFrame = cframeFinal * CFrame.new(0, 5, 0)
         RunService.Heartbeat:Wait()
 
-        -- 3. COLOCAR EL MUEBLE
-        local exitoPlace, idMueble = pcall(function()
-            return PlotSystem:InvokeServer("placeFurniture", BLOQUE_GENERICO, cframeFinal)
-        end)
+        -- 3. PONER BLOQUE
+        PlotSystem:InvokeServer("placeFurniture", BLOQUE_GENERICO, cframeFinal)
         
-        -- 4. VALIDAR ID Y ESCALAR
-        if exitoPlace then
-            if type(idMueble) == "string" then
-                -- ÉXITO: Tenemos el ID (UUID)
-                print("✅ Bloque " .. i .. " ID: " .. idMueble .. " | Intentando escalar a: " .. tostring(sizeObjetivo))
-                
-                -- ESPERA DE SEGURIDAD (El servidor necesita procesar que el bloque existe)
-                task.wait(TIEMPO_SEGURIDAD)
-                
-                local exitoScale, errScale = pcall(function()
-                    PlotSystem:InvokeServer("scaleFurniture", idMueble, cframeFinal, sizeObjetivo)
-                end)
-                
-                if not exitoScale then
-                    warn("❌ Fallo Scale Bloque " .. i .. ": " .. tostring(errScale))
+        -- 4. ESPERAR A QUE APAREZCA Y BUSCARLO
+        task.wait(TIEMPO_BUSQUEDA) -- Damos tiempo al servidor para crear la parte
+        
+        local bloqueEncontrado = buscarBloqueReciente(cframeFinal)
+        
+        if bloqueEncontrado then
+            -- ¡Lo encontramos! Ahora intentamos escalarlo.
+            -- Intentamos enviar el OBJETO DIRECTAMENTE o sus atributos
+            print("✅ Bloque encontrado: " .. tostring(bloqueEncontrado:GetFullName()))
+            
+            -- INTENTO 1: Enviar el objeto tal cual (Muchos scripts aceptan esto)
+            local exito, err = pcall(function()
+                PlotSystem:InvokeServer("scaleFurniture", bloqueEncontrado, cframeFinal, sizeObjetivo)
+            end)
+            
+            if not exito then
+                -- Si falló, tal vez el script usa un atributo ID dentro de la parte
+                local posibleID = bloqueEncontrado:GetAttribute("ID") or bloqueEncontrado:GetAttribute("UUID") or bloqueEncontrado:GetAttribute("ItemId")
+                if posibleID then
+                    print("🔄 Intentando con Atributo ID: " .. tostring(posibleID))
+                    PlotSystem:InvokeServer("scaleFurniture", posibleID, cframeFinal, sizeObjetivo)
+                else
+                    warn("❌ No se pudo escalar el bloque " .. i)
                 end
-            else
-                -- FALLO: El servidor devolvió algo raro (o nil)
-                warn("⚠️ Bloque " .. i .. " colocado, pero ID inválido: " .. tostring(idMueble))
-                -- Intento desesperado: buscar el bloque más cercano si no nos dio ID (opcional, por ahora solo warn)
             end
         else
-            warn("❌ Fallo Place Bloque " .. i .. ": " .. tostring(idMueble))
+            warn("⚠️ No encontré el bloque " .. i .. " en Terrenos.")
         end
         
-        -- Espera entre bloques (para no saturar)
-        task.wait(0.1)
+        task.wait(TIEMPO_ESPERA_ENTRE_BLOQUES)
     end
     
     hrp.Anchored = false
     hrp.CFrame = posOriginal
     procesoActivo = false
-    notificar("✅ Construcción Terminada")
+    notificar("✅ Terminado")
 end
 
 function detenerTodo()
@@ -441,4 +453,4 @@ end)
 
 tool.Unequipped:Connect(function() highlightBox.Adornee = nil bloqueSeleccionado = nil end)
 actualizarListaArchivos()
-notificar("✅ Script v8 (Debug + Wait)")
+notificar("✅ Script v9 (Buscador Activo)")
