@@ -2,27 +2,27 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
 -- ==========================================
--- 🔗 CONEXIÓN CON EL JUEGO (REMOTES)
+-- 🔗 CONEXIÓN CON EL JUEGO
 -- ==========================================
--- Buscamos el remoto de construcción
+-- Buscamos el remoto necesario para construir
 local PlotSystem = ReplicatedStorage:WaitForChild("Connections"):WaitForChild("Remotes"):WaitForChild("PlotSystem")
 
 -- ==========================================
 -- ⚙️ CONFIGURACIÓN
 -- ==========================================
 local CARPETA_PRINCIPAL = "MisConstruccionesRoblox" 
-local RADIO_HORIZONTAL = 45 -- Radio de copia
+local RADIO_HORIZONTAL = 45 
 local TRANSPARENCIA_MOLDE = 0.5 
-local TIEMPO_ESPERA_ENTRE_BLOQUES = 0.15 -- Velocidad del Teleport (ajustar si te kickean)
-local BLOQUE_INTERNO = "part_cube" -- Usamos siempre cubos para evitar errores
+local TIEMPO_ESPERA_ENTRE_BLOQUES = 0.15 -- Velocidad del Teleport (Ajustar si va muy lento o muy rápido)
+local BLOQUE_USAR = "part_cube" -- Forzamos usar cubos para evitar errores
 
 if not isfolder(CARPETA_PRINCIPAL) then makefolder(CARPETA_PRINCIPAL) end
 
@@ -30,12 +30,12 @@ local datosGuardados = {}
 local fantasmasCreados = {} 
 local bloqueSeleccionado = nil 
 local menuAbierto = true
-local construyendo = false -- Variable de control para el TP
+local construyendo = false -- Variable para controlar el teleport
 
 -- Herramienta
 local tool = Instance.new("Tool")
 tool.RequiresHandle = false
-tool.Name = "📐 Gestor PRO (Teleport)"
+tool.Name = "📐 Gestor (Click para abrir)"
 tool.Parent = LocalPlayer.Backpack
 
 -- Selección Visual
@@ -81,7 +81,7 @@ mainFrame.Parent = screenGui
 
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
--- BARRA DE TÍTULO (MOVER)
+-- BARRA DE TÍTULO
 local topBar = Instance.new("Frame")
 topBar.Size = UDim2.new(1, 0, 0, 35)
 topBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -193,7 +193,7 @@ toggleBtn.MouseButton1Click:Connect(toggleGUI)
 closeMini.MouseButton1Click:Connect(toggleGUI)
 
 -- ==========================================
--- 🧠 LÓGICA & FUNCIONES
+-- 🧠 LÓGICA & FUNCIONES (ACTUALIZADAS PARA TELEPORT)
 -- ==========================================
 
 function notificar(texto)
@@ -268,6 +268,7 @@ function obtenerRotacionJugador()
     return CFrame.new()
 end
 
+-- LÓGICA COPIAR (MODIFICADA PARA GUARDAR TAMAÑO Y FORZAR CUBO)
 function copiarEstructura()
     if not bloqueSeleccionado then return notificar("⚠️ Selecciona un bloque") end
     local centroPart = bloqueSeleccionado
@@ -275,118 +276,106 @@ function copiarEstructura()
     local origenCFrame = centroPart.CFrame
     local count = 0
     
-    -- Esfera visual roja
+    -- Visual rojo
     local sphere = Instance.new("Part")
-    sphere.Shape = Enum.PartType.Ball
+    sphere.Shape = "Ball"
     sphere.Size = Vector3.new(RADIO_HORIZONTAL*2, RADIO_HORIZONTAL*2, RADIO_HORIZONTAL*2)
     sphere.CFrame = origenCFrame
-    sphere.Color = Color3.fromRGB(255,0,0)
     sphere.Transparency = 0.8
-    sphere.Anchored = true
+    sphere.Color = Color3.fromRGB(255,0,0)
     sphere.CanCollide = false
+    sphere.Anchored = true
     sphere.Parent = workspace
-    
+    game:GetService("Debris"):AddItem(sphere, 1)
+
     for _, part in pairs(workspace:GetDescendants()) do
         if esBloqueValido(part) and part ~= sphere then
-             if part.Parent.Name ~= "Terrenos" then
-                local dist = (Vector3.new(part.Position.X, 0, part.Position.Z) - Vector3.new(origenCFrame.Position.X, 0, origenCFrame.Position.Z)).Magnitude
-                if dist <= RADIO_HORIZONTAL then
-                    local cframeRelativo = origenCFrame:Inverse() * part.CFrame
-                    table.insert(datosGuardados, {
-                        Name = BLOQUE_INTERNO, -- Guardamos siempre como cubo
-                        Color = {part.Color.R, part.Color.G, part.Color.B}, 
-                        Mat = part.Material.Name, 
-                        Size = {part.Size.X, part.Size.Y, part.Size.Z}, -- Importante: Tamaño
-                        CF = {cframeRelativo:GetComponents()}
-                    })
-                    count = count + 1
-                end
+            local dist = (Vector3.new(part.Position.X, 0, part.Position.Z) - Vector3.new(origenCFrame.Position.X, 0, origenCFrame.Position.Z)).Magnitude
+            if dist <= RADIO_HORIZONTAL then
+                local cframeRelativo = origenCFrame:Inverse() * part.CFrame
+                table.insert(datosGuardados, {
+                    Name = BLOQUE_USAR, -- Guardamos siempre "part_cube"
+                    Color = {part.Color.R, part.Color.G, part.Color.B}, 
+                    Mat = part.Material.Name, 
+                    Size = {part.Size.X, part.Size.Y, part.Size.Z}, -- GUARDAMOS TAMAÑO
+                    CF = {cframeRelativo:GetComponents()}
+                })
+                count = count + 1
             end
         end
     end
-    sphere:Destroy()
     notificar("✅ Copiados: " .. count)
 end
 
--- ==========================================
--- 🏗️ LÓGICA DE TELEPORT & CONSTRUCCIÓN (NUEVO)
--- ==========================================
-
+-- LÓGICA PEGAR (MODIFICADA: TELEPORT BUILDER)
 function pegarEstructura()
     if not bloqueSeleccionado then return notificar("⚠️ Selecciona destino") end
     if #datosGuardados == 0 then return notificar("⚠️ Archivo vacío") end
-    if construyendo then return notificar("⚠️ Ya estás construyendo") end
+    if construyendo then return notificar("⚠️ Ya construyendo...") end
     
     local character = LocalPlayer.Character
     local hrp = character and character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return notificar("⚠️ Personaje no encontrado") end
-    
+    if not hrp then return end
+
     construyendo = true
-    notificar("🚀 INICIANDO AUTO-CONSTRUCCIÓN...")
+    notificar("🚀 Construyendo (No te muevas)...")
     
-    -- Cálculos de posición
     local rotacionDeseada = obtenerRotacionJugador()
     local nuevoCentroCFrame = CFrame.new(bloqueSeleccionado.Position + Vector3.new(0,1,0)) * rotacionDeseada
-    local posicionOriginal = hrp.CFrame -- Guardamos donde estabas
     
-    -- Anclamos al jugador para que no tiemble
-    hrp.Anchored = true
-    
-    for i, data in pairs(datosGuardados) do
-        if not construyendo then break end -- Freno de emergencia
+    local posOriginal = hrp.CFrame -- Guardamos posición original
+    hrp.Anchored = true -- Anclamos para estabilidad
+
+    for _, data in pairs(datosGuardados) do
+        if not construyendo then break end -- Si pulsas X para parar
         
-        -- 1. Calcular posición final del bloque
+        -- 1. Calcular posición final
         local relCF = CFrame.new(unpack(data.CF))
         local cframeFinal = nuevoCentroCFrame * relCF
         cframeFinal = redondearCFrame(cframeFinal)
-        local sizeVector = Vector3.new(unpack(data.Size))
+        local sizeFinal = Vector3.new(unpack(data.Size))
         
-        -- 2. TELETRANSPORTAR AL JUGADOR
-        -- Nos movemos justo encima de donde va el bloque
-        hrp.CFrame = cframeFinal * CFrame.new(0, 5, 0)
-        
-        -- Esperamos un frame para que el server actualice la posición
+        -- 2. TELETRANSPORTARSE
+        hrp.CFrame = cframeFinal * CFrame.new(0, 5, 0) -- Un poco por encima
         RunService.Heartbeat:Wait()
         
-        -- 3. ENVIAR SEÑAL DE CONSTRUIR (PLACE)
-        local exito, idMueble = pcall(function()
+        -- 3. PONER Y ESCALAR
+        local exito, id = pcall(function() 
             return PlotSystem:InvokeServer("placeFurniture", data.Name, cframeFinal)
         end)
         
-        -- 4. ENVIAR SEÑAL DE ESCALAR (SCALE) - Inmediatamente
-        if exito and idMueble then
+        if exito and id then
             pcall(function()
-                PlotSystem:InvokeServer("scaleFurniture", idMueble, cframeFinal, sizeVector)
+                 PlotSystem:InvokeServer("scaleFurniture", id, cframeFinal, sizeFinal)
             end)
         end
         
-        -- Pausa para no saturar y que el anticheat no moleste
         if TIEMPO_ESPERA_ENTRE_BLOQUES > 0 then task.wait(TIEMPO_ESPERA_ENTRE_BLOQUES) end
     end
     
-    -- Al terminar, devolvemos al jugador y soltamos
     hrp.Anchored = false
-    hrp.CFrame = posicionOriginal
+    hrp.CFrame = posOriginal -- Volver al sitio
     construyendo = false
-    notificar("✅ Construcción Finalizada")
+    notificar("✅ Listo")
 end
 
 function limpiarFantasmas()
-    -- Esta función ya no es necesaria con el teleport, pero la dejamos para que el botón no de error
-    notificar("🧹 Limpiado (Modo Teleport)")
+    -- Esta función ahora sirve de FRENO DE EMERGENCIA y limpieza
+    construyendo = false
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.Anchored = false
+    end
+    
+    for _, p in pairs(fantasmasCreados) do if p then p:Destroy() end end
+    fantasmasCreados = {}
+    bloqueSeleccionado = nil
+    highlightBox.Adornee = nil
+    notificar("🛑 STOP / Limpiado")
 end
 
 function vaciarMemoria()
     datosGuardados = {}
     notificar("♻️ Memoria vacía")
-end
-
-function detenerEmergencia()
-    construyendo = false
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.Anchored = false
-    end
-    notificar("🛑 DETENIDO")
 end
 
 -- ==========================================
@@ -406,24 +395,24 @@ local function crearBoton(texto, color, orden, func)
 end
 
 crearBoton("🎯 COPIAR (K)", Color3.fromRGB(0, 150, 100), 1, copiarEstructura)
-crearBoton("🏗️ PEGAR AUTO (V)", Color3.fromRGB(0, 100, 200), 2, pegarEstructura)
-crearBoton("🛑 STOP (X)", Color3.fromRGB(200, 50, 0), 3, detenerEmergencia)
+crearBoton("🏗️ PEGAR (V)", Color3.fromRGB(0, 100, 200), 2, pegarEstructura)
+crearBoton("🧹 LIMPIAR VISUAL (X)", Color3.fromRGB(200, 120, 0), 3, limpiarFantasmas)
 crearBoton("♻️ VACIAR MEMORIA (Z)", Color3.fromRGB(150, 0, 0), 4, vaciarMemoria)
 
 tool.Equipped:Connect(function(mouse)
     actualizarListaArchivos()
     mouse.Button1Down:Connect(function()
-        if mouse.Target then
+        if mouse.Target and esBloqueValido(mouse.Target) then
             bloqueSeleccionado = mouse.Target
             highlightBox.Adornee = bloqueSeleccionado
-            notificar("🎯 Punto: " .. bloqueSeleccionado.Name)
+            notificar("🎯 " .. bloqueSeleccionado.Name)
         end
     end)
     mouse.KeyDown:Connect(function(key)
         key = key:lower()
         if key == "k" then copiarEstructura()
         elseif key == "v" then pegarEstructura()
-        elseif key == "x" then detenerEmergencia()
+        elseif key == "x" then limpiarFantasmas()
         elseif key == "z" then vaciarMemoria()
         end
     end)
@@ -431,4 +420,4 @@ end)
 
 tool.Unequipped:Connect(function() highlightBox.Adornee = nil bloqueSeleccionado = nil end)
 actualizarListaArchivos()
-notificar("✅ UI Restaurada + Teleport V8 Activado")
+notificar("✅ Script vFinal (Teleport + UI Original)")
