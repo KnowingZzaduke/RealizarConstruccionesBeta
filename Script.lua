@@ -4,7 +4,7 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local Debris = game:GetService("Debris") -- Agregado para limpiar visuales
+local Debris = game:GetService("Debris")
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
@@ -21,9 +21,7 @@ local PlotSystem = Remotes:WaitForChild("PlotSystem")
 -- ==========================================
 local CARPETA_PRINCIPAL = "MisConstruccionesRoblox" 
 local RADIO_HORIZONTAL = 40 
-local TRANSPARENCIA_MOLDE = 0.5 
-local TIEMPO_SEGURIDAD = 0.3
-local BLOQUE_GENERICO = "part_cube" 
+local BLOQUE_GENERICO = "part_cube" -- Nombre del modelo que colocamos
 
 if not isfolder(CARPETA_PRINCIPAL) then makefolder(CARPETA_PRINCIPAL) end
 
@@ -36,41 +34,28 @@ local procesoActivo = false
 -- Herramienta
 local tool = Instance.new("Tool")
 tool.RequiresHandle = false
-tool.Name = "📐 Gestor v8 (Hunter)" -- Actualizado nombre
+tool.Name = "📐 Gestor v15 (Fixed ID)"
 tool.Parent = LocalPlayer.Backpack
 
 -- Selección Visual
 local highlightBox = Instance.new("SelectionBox")
-highlightBox.Color3 = Color3.fromRGB(0, 255, 255)
+highlightBox.Color3 = Color3.fromRGB(0, 255, 100)
 highlightBox.LineThickness = 0.05
 highlightBox.Parent = workspace
 highlightBox.Adornee = nil
 
 -- ==========================================
--- 🖥️ GUI (DISEÑO INTOCABLE)
+-- 🖥️ GUI (INTOCABLE)
 -- ==========================================
 if CoreGui:FindFirstChild("ClonadorProGUI") then CoreGui.ClonadorProGUI:Destroy() end
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ClonadorProGUI"
-if syn and syn.protect_gui then syn.protect_gui(screenGui) 
-elseif gethui then screenGui.Parent = gethui()
-else screenGui.Parent = CoreGui end
-
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "ToggleMenu"
-toggleBtn.Size = UDim2.new(0, 45, 0, 45)
-toggleBtn.Position = UDim2.new(0.02, 0, 0.4, 0) 
-toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
-toggleBtn.Text = "📐"
-toggleBtn.TextSize = 25
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-toggleBtn.Parent = screenGui
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 10)
+if syn and syn.protect_gui then syn.protect_gui(screenGui) elseif gethui then screenGui.Parent = gethui() else screenGui.Parent = CoreGui end
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 230, 0, 420)
+mainFrame.Size = UDim2.new(0, 230, 0, 420) 
 mainFrame.Position = UDim2.new(0.15, 0, 0.25, 0) 
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 mainFrame.Parent = screenGui
@@ -83,11 +68,11 @@ topBar.Parent = mainFrame
 Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 10)
 
 local title = Instance.new("TextLabel")
-title.Text = "🏗️ CONSTRUCTOR v8"
+title.Text = "🏗️ FIXED v15"
 title.Size = UDim2.new(0.8, 0, 1, 0)
 title.Position = UDim2.new(0.05, 0, 0, 0)
 title.BackgroundTransparency = 1
-title.TextColor3 = Color3.fromRGB(0, 255, 255)
+title.TextColor3 = Color3.fromRGB(0, 255, 100)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 14
 title.TextXAlignment = Enum.TextXAlignment.Left
@@ -131,7 +116,7 @@ local layoutActions = Instance.new("UIListLayout")
 layoutActions.Padding = UDim.new(0, 6)
 layoutActions.Parent = actionsFrame
 
--- Funciones Básicas GUI
+-- UI Helpers
 local function hacerArrastrable(frameDrag, frameMover)
     local dragging, dragInput, dragStart, startPos
     frameDrag.InputBegan:Connect(function(input)
@@ -148,19 +133,39 @@ local function hacerArrastrable(frameDrag, frameMover)
             frameMover.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
-    UserInputService.InputEnded:Connect(function(input)
-         if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
+    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
 end
 hacerArrastrable(topBar, mainFrame)
 
-toggleBtn.MouseButton1Click:Connect(function()
-    menuAbierto = not menuAbierto
-    mainFrame.Visible = menuAbierto
-end)
-
 function notificar(texto)
-    game:GetService("StarterGui"):SetCore("SendNotification", {Title="Constructor", Text=texto, Duration=2})
+    game:GetService("StarterGui"):SetCore("SendNotification", {Title="Script v15", Text=texto, Duration=2})
+end
+
+-- ==========================================
+-- 🕵️‍♂️ LÓGICA DE BÚSQUEDA CORREGIDA (SOLUCIÓN)
+-- ==========================================
+
+function encontrarBloqueYSuID(posicionCFrame)
+    -- 1. Buscamos cualquier parte física en el punto de construcción
+    local partesCercanas = workspace:GetPartBoundsInRadius(posicionCFrame.Position, 0.5)
+    
+    for _, parte in pairs(partesCercanas) do
+        if parte:IsA("BasePart") and parte.Name ~= "Baseplate" and not parte.Parent:FindFirstChild("Humanoid") then
+            
+            -- Según tu imagen, el ID está en el PADRE (el Modelo)
+            local modeloPadre = parte.Parent
+            
+            if modeloPadre then
+                -- Buscamos EXACTAMENTE el atributo "Id" (Case Sensitive)
+                local id = modeloPadre:GetAttribute("Id")
+                
+                if id then
+                    return parte, id -- ¡ÉXITO!
+                end
+            end
+        end
+    end
+    return nil, nil
 end
 
 function redondearCFrame(cf)
@@ -169,6 +174,86 @@ function redondearCFrame(cf)
     return CFrame.new(rX, rY, rZ) * (cf - cf.Position)
 end
 
+function construirReal()
+    if not bloqueSeleccionado then return notificar("⚠️ Selecciona el suelo base") end
+    if #datosGuardados == 0 then return notificar("⚠️ Carga datos primero") end
+    if procesoActivo then return end
+
+    local character = LocalPlayer.Character
+    local hrp = character and character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    procesoActivo = true
+    notificar("🔨 Construyendo v15...")
+    
+    local rotacionDeseada = CFrame.Angles(0, 0, 0) 
+    local nuevoCentroCFrame = CFrame.new(bloqueSeleccionado.Position + Vector3.new(0,1,0)) * rotacionDeseada
+    
+    local posOriginal = hrp.CFrame 
+    hrp.Anchored = true 
+
+    for i, data in pairs(datosGuardados) do
+        if not procesoActivo then break end 
+
+        -- 1. Calcular Datos
+        local relCF = CFrame.new(unpack(data.CF))
+        local cframeFinal = nuevoCentroCFrame * relCF
+        cframeFinal = redondearCFrame(cframeFinal)
+        local sizeObjetivo = Vector3.new(unpack(data.Size))
+        
+        -- 2. Teleport
+        hrp.CFrame = cframeFinal * CFrame.new(0, 5, 0)
+        RunService.Heartbeat:Wait()
+
+        -- 3. PONER BLOQUE (Ignoramos retorno)
+        PlotSystem:InvokeServer("placeFurniture", BLOQUE_GENERICO, cframeFinal)
+        
+        -- 4. 🕵️‍♂️ CAZAR EL ID (LOOP DE ESPERA)
+        local bloqueFisico = nil
+        local idEncontrado = nil
+        local intentos = 0
+        
+        -- Intentamos durante 1.5 segundos encontrar el bloque Y que tenga el ID cargado
+        while not idEncontrado and intentos < 15 do
+            task.wait(0.1) 
+            bloqueFisico, idEncontrado = encontrarBloqueYSuID(cframeFinal)
+            intentos = intentos + 1
+        end
+        
+        -- 5. ESCALAR
+        if idEncontrado then
+            print("✅ Bloque " .. i .. " | ID: " .. idEncontrado .. " | Scaling...")
+            
+            -- Feedback Visual (Caja Verde)
+            if bloqueFisico then
+                local box = Instance.new("SelectionBox", bloqueFisico)
+                box.Color3 = Color3.new(0,1,0); box.Adornee = bloqueFisico; Debris:AddItem(box, 0.5)
+            end
+
+            -- ENVIAR ORDEN DE ESCALA
+            PlotSystem:InvokeServer("scaleFurniture", idEncontrado, cframeFinal, sizeObjetivo)
+            
+        else
+            warn("❌ Bloque " .. i .. ": No se encontró el atributo 'Id' en el modelo padre.")
+            -- Feedback Visual (Caja Roja)
+            if bloqueFisico then
+                 local box = Instance.new("SelectionBox", bloqueFisico)
+                 box.Color3 = Color3.new(1,0,0); box.Adornee = bloqueFisico; Debris:AddItem(box, 1)
+            end
+        end
+        
+        task.wait(0.1)
+    end
+    
+    hrp.Anchored = false
+    hrp.CFrame = posOriginal
+    procesoActivo = false
+    notificar("✅ Terminado")
+end
+
+-- ==========================================
+-- 💾 SISTEMA DE ARCHIVOS (IGUAL)
+-- ==========================================
 function actualizarListaArchivos()
     for _, child in pairs(scrollList:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
     local success, archivos = pcall(function() return listfiles(CARPETA_PRINCIPAL) end)
@@ -177,30 +262,18 @@ function actualizarListaArchivos()
         local nombreArchivo = rutaCompleta:match("([^/]+)$")
         if nombreArchivo:sub(-5) == ".json" then
             local itemFrame = Instance.new("Frame")
-            itemFrame.Size = UDim2.new(1, 0, 0, 25)
-            itemFrame.BackgroundTransparency = 1
-            itemFrame.Parent = scrollList
+            itemFrame.Size = UDim2.new(1, 0, 0, 25); itemFrame.BackgroundTransparency = 1; itemFrame.Parent = scrollList
             
             local btnLoad = Instance.new("TextButton")
-            btnLoad.Text = nombreArchivo:sub(1, -6)
-            btnLoad.Size = UDim2.new(0.75, 0, 1, 0)
-            btnLoad.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-            btnLoad.TextColor3 = Color3.new(1,1,1)
-            btnLoad.Parent = itemFrame
-            
+            btnLoad.Text = nombreArchivo:sub(1, -6); btnLoad.Size = UDim2.new(0.75, 0, 1, 0); btnLoad.BackgroundColor3 = Color3.fromRGB(60, 60, 60); btnLoad.TextColor3 = Color3.new(1,1,1); btnLoad.Parent = itemFrame
             btnLoad.MouseButton1Click:Connect(function()
                 local contenido = readfile(rutaCompleta)
                 datosGuardados = HttpService:JSONDecode(contenido)
-                notificar("📂 Cargado: " .. #datosGuardados .. " objetos")
+                notificar("📂 Cargado: " .. #datosGuardados)
             end)
             
             local btnDel = Instance.new("TextButton")
-            btnDel.Text = "X"
-            btnDel.Size = UDim2.new(0.2, 0, 1, 0)
-            btnDel.Position = UDim2.new(0.8, 0, 0, 0)
-            btnDel.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-            btnDel.TextColor3 = Color3.new(1,1,1)
-            btnDel.Parent = itemFrame
+            btnDel.Text = "X"; btnDel.Size = UDim2.new(0.2, 0, 1, 0); btnDel.Position = UDim2.new(0.8, 0, 0, 0); btnDel.BackgroundColor3 = Color3.fromRGB(150, 0, 0); btnDel.TextColor3 = Color3.new(1,1,1); btnDel.Parent = itemFrame
             btnDel.MouseButton1Click:Connect(function() delfile(rutaCompleta) actualizarListaArchivos() end)
         end
     end
@@ -212,264 +285,49 @@ btnSave.MouseButton1Click:Connect(function()
     local nombre = nameInput.Text
     if nombre == "" then return notificar("⚠️ Falta nombre") end
     writefile(CARPETA_PRINCIPAL .. "/" .. nombre .. ".json", HttpService:JSONEncode(datosGuardados))
-    notificar("💾 Guardado")
-    nameInput.Text = ""
-    actualizarListaArchivos()
+    notificar("💾 Guardado"); nameInput.Text = ""; actualizarListaArchivos()
 end)
 
 function esBloqueValido(part)
-    return part:IsA("BasePart") 
-           and part.Name ~= "Baseplate" 
-           and part.Transparency < 1 
-           and not part.Parent:FindFirstChild("Humanoid") 
-           and not part.Name:find("Ghost_")
-           and part.Parent.Name ~= "Terrenos"
+    return part:IsA("BasePart") and part.Name ~= "Baseplate" and part.Transparency < 1 and not part.Name:find("Ghost_") and part.Parent.Name ~= "Terrenos"
 end
-
-function obtenerRotacionJugador()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = LocalPlayer.Character.HumanoidRootPart
-        local x, y, z = hrp.CFrame:ToEulerAnglesYXZ()
-        local rotacionSnap = math.round(y / (math.pi/2)) * (math.pi/2)
-        return CFrame.Angles(0, rotacionSnap, 0)
-    end
-    return CFrame.new()
-end
-
--- ==========================================
--- 🕵️‍♂️ FUNCIONES "HUNTER" (NUEVAS)
--- ==========================================
-
-function encontrarBloqueEnPosicion(posicionCFrame)
-    -- Escanea en un radio muy pequeño (0.8 studs) alrededor de donde pusimos el bloque
-    local partesCercanas = workspace:GetPartBoundsInRadius(posicionCFrame.Position, 0.8)
-    
-    for _, parte in pairs(partesCercanas) do
-        -- Busca el bloque que coincida con el nombre genérico
-        if parte:IsA("BasePart") and parte.Name == BLOQUE_GENERICO then
-            return parte
-        end
-    end
-    return nil
-end
-
-function obtenerIDReal(parte)
-    -- Intenta todas las variantes posibles de atributos donde los tycoons guardan IDs
-    if parte:GetAttribute("ID") then return parte:GetAttribute("ID") end
-    if parte:GetAttribute("ItemId") then return parte:GetAttribute("ItemId") end
-    if parte:GetAttribute("UUID") then return parte:GetAttribute("UUID") end
-    if parte:GetAttribute("DataId") then return parte:GetAttribute("DataId") end
-    
-    -- Si no tiene atributo, devuelve la parte misma (a veces el script acepta la instancia)
-    return parte
-end
-
--- ==========================================
--- 🛠️ FUNCIONES DE COPIAR Y CONSTRUIR
--- ==========================================
 
 function copiarEstructura()
-    if not bloqueSeleccionado then return notificar("⚠️ Selecciona un bloque central") end
-    local centroPart = bloqueSeleccionado
+    if not bloqueSeleccionado then return notificar("⚠️ Selecciona centro") end
     datosGuardados = {}
-    local origenCFrame = centroPart.CFrame
+    local origen = bloqueSeleccionado.CFrame
     local count = 0
     
-    local esfera = Instance.new("Part")
-    esfera.Shape = "Ball"
-    esfera.Size = Vector3.new(RADIO_HORIZONTAL*2, RADIO_HORIZONTAL*2, RADIO_HORIZONTAL*2)
-    esfera.CFrame = origenCFrame
-    esfera.Transparency = 0.8
-    esfera.Color = Color3.fromRGB(255, 0, 0)
-    esfera.Anchored = true
-    esfera.CanCollide = false
-    esfera.Parent = workspace
-    Debris:AddItem(esfera, 1)
+    local e = Instance.new("Part"); e.Shape="Ball"; e.Size=Vector3.new(RADIO_HORIZONTAL*2, RADIO_HORIZONTAL*2, RADIO_HORIZONTAL*2); e.CFrame=origen; e.Transparency=0.8; e.Color=Color3.fromRGB(255,0,0); e.Anchored=true; e.CanCollide=false; e.Parent=workspace; Debris:AddItem(e, 1)
 
-    for _, part in pairs(workspace:GetDescendants()) do
-        if esBloqueValido(part) and part ~= esfera then
-            local dist = (Vector3.new(part.Position.X, 0, part.Position.Z) - Vector3.new(origenCFrame.Position.X, 0, origenCFrame.Position.Z)).Magnitude
-            if dist <= RADIO_HORIZONTAL then
-                local cframeRelativo = origenCFrame:Inverse() * part.CFrame
-                
-                table.insert(datosGuardados, {
-                    Name = BLOQUE_GENERICO, 
-                    Color = {part.Color.R, part.Color.G, part.Color.B}, 
-                    Mat = part.Material.Name, 
-                    Size = {part.Size.X, part.Size.Y, part.Size.Z}, 
-                    CF = {cframeRelativo:GetComponents()}
-                })
-                count = count + 1
-            end
+    for _, p in pairs(workspace:GetDescendants()) do
+        if esBloqueValido(p) and (p.Position - origen.Position).Magnitude < RADIO_HORIZONTAL and p ~= e then
+            local rel = origen:Inverse() * p.CFrame
+            table.insert(datosGuardados, {
+                Name = BLOQUE_GENERICO, Size = {p.Size.X, p.Size.Y, p.Size.Z}, CF = {rel:GetComponents()}
+            })
+            count = count + 1
         end
     end
     notificar("✅ Copiados: " .. count)
 end
 
-function verMolde()
-    if not bloqueSeleccionado then return notificar("⚠️ Selecciona destino") end
-    if #datosGuardados == 0 then return notificar("⚠️ Archivo vacío") end
-    
-    limpiarFantasmas()
-    
-    local rotacionDeseada = obtenerRotacionJugador()
-    local nuevoCentroCFrame = CFrame.new(bloqueSeleccionado.Position + Vector3.new(0,1,0)) * rotacionDeseada
-    
-    notificar("👁️ Mostrando Molde...")
-    for _, data in pairs(datosGuardados) do
-        local relCF = CFrame.new(unpack(data.CF))
-        local cframeFinal = nuevoCentroCFrame * relCF
-        cframeFinal = redondearCFrame(cframeFinal)
-        
-        local ghost = Instance.new("Part")
-        ghost.Name = "Ghost_View"
-        ghost.Size = Vector3.new(unpack(data.Size))
-        ghost.CFrame = cframeFinal
-        ghost.Color = Color3.fromRGB(0, 255, 255)
-        ghost.Material = Enum.Material.ForceField
-        ghost.Transparency = 0.6
-        ghost.Anchored = true
-        ghost.CanCollide = false
-        ghost.Parent = workspace
-        table.insert(fantasmasCreados, ghost)
-    end
+function detenerTodo() procesoActivo = false; notificar("🛑 Detenido") end
+
+-- Botones
+local function btn(txt, col, ord, func)
+    local b = Instance.new("TextButton"); b.Text=txt; b.Size=UDim2.new(1,0,0,32); b.BackgroundColor3=col; b.TextColor3=Color3.new(1,1,1); b.Font=Enum.Font.GothamBold; b.LayoutOrder=ord; b.Parent=actionsFrame; Instance.new("UICorner", b); b.MouseButton1Click:Connect(func)
 end
 
--- ==========================================
--- 🚀 LÓGICA CONSTRUCTOR v8 "HUNTER"
--- ==========================================
-function construirReal()
-    if not bloqueSeleccionado then return notificar("⚠️ Selecciona el suelo base") end
-    if #datosGuardados == 0 then return notificar("⚠️ No hay datos cargados") end
-    if procesoActivo then return notificar("⚠️ Ya construyendo...") end
-    
-    local character = LocalPlayer.Character
-    local hrp = character and character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+btn("🎯 1. COPIAR (K)", Color3.fromRGB(0, 150, 100), 1, copiarEstructura)
+btn("🔨 2. CONSTRUIR (B)", Color3.fromRGB(200, 120, 0), 3, construirReal)
+btn("🛑 PARAR (X)", Color3.fromRGB(150, 0, 0), 4, detenerTodo)
 
-    procesoActivo = true
-    notificar("🔨 Cazando Bloques...")
-    
-    local rotacionDeseada = obtenerRotacionJugador()
-    local nuevoCentroCFrame = CFrame.new(bloqueSeleccionado.Position + Vector3.new(0,1,0)) * rotacionDeseada
-    
-    local posOriginal = hrp.CFrame 
-    hrp.Anchored = true 
-
-    for i, data in pairs(datosGuardados) do
-        if not procesoActivo then break end 
-
-        -- 1. Calcular coordenadas
-        local relCF = CFrame.new(unpack(data.CF))
-        local cframeFinal = nuevoCentroCFrame * relCF
-        cframeFinal = redondearCFrame(cframeFinal)
-        local sizeObjetivo = Vector3.new(unpack(data.Size))
-        
-        -- 2. Teleport
-        hrp.CFrame = cframeFinal * CFrame.new(0, 5, 0)
-        RunService.Heartbeat:Wait()
-
-        -- 3. COLOCAR (PlaceFurniture) - Ignoramos el retorno
-        pcall(function()
-            PlotSystem:InvokeServer("placeFurniture", BLOQUE_GENERICO, cframeFinal)
-        end)
-        
-        -- 4. 🕵️‍♂️ EL MODO CAZADOR (HUNTER)
-        local bloqueEncontrado = nil
-        local intentos = 0
-        
-        -- Bucle de búsqueda (espera hasta 1 segundo a que aparezca el bloque)
-        while not bloqueEncontrado and intentos < 10 do
-            task.wait(0.1) -- Esperamos a que el servidor replique el bloque
-            bloqueEncontrado = encontrarBloqueEnPosicion(cframeFinal)
-            intentos = intentos + 1
-        end
-
-        -- 5. SI LO ENCONTRAMOS -> ESCALAR
-        if bloqueEncontrado then
-            local idParaEnviar = obtenerIDReal(bloqueEncontrado)
-            
-            -- Feedback visual: Caja verde temporal si lo encuentra
-            local box = Instance.new("SelectionBox")
-            box.Color3 = Color3.new(0, 1, 0)
-            box.Adornee = bloqueEncontrado
-            box.Parent = workspace
-            Debris:AddItem(box, 0.5)
-
-            -- Enviamos la orden de escalar con el ID que robamos del bloque físico
-            pcall(function()
-                PlotSystem:InvokeServer("scaleFurniture", idParaEnviar, cframeFinal, sizeObjetivo)
-            end)
-        else
-            warn("❌ Bloque " .. i .. ": No apareció en el Workspace (Lag o error)")
-        end
-        
-        task.wait(0.1) -- Pequeña pausa entre bloques
-    end
-    
-    hrp.Anchored = false
-    hrp.CFrame = posOriginal
-    procesoActivo = false
-    notificar("✅ Construcción Terminada")
-end
-
-function detenerTodo()
-    procesoActivo = false
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.Anchored = false
-    end
-    limpiarFantasmas()
-    notificar("🛑 DETENIDO")
-end
-
-function limpiarFantasmas()
-    for _, p in pairs(fantasmasCreados) do if p then p:Destroy() end end
-    fantasmasCreados = {}
-end
-
-function vaciarMemoria()
-    datosGuardados = {}
-    notificar("♻️ Memoria vacía")
-end
-
-local function crearBoton(texto, color, orden, func)
-    local btn = Instance.new("TextButton")
-    btn.Text = texto
-    btn.Size = UDim2.new(1, 0, 0, 32)
-    btn.BackgroundColor3 = color
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.GothamBold
-    btn.LayoutOrder = orden
-    btn.Parent = actionsFrame
-    Instance.new("UICorner", btn)
-    btn.MouseButton1Click:Connect(func)
-end
-
-crearBoton("🎯 1. COPIAR (K)", Color3.fromRGB(0, 150, 100), 1, copiarEstructura)
-crearBoton("👁️ 2. VER MOLDE (V)", Color3.fromRGB(0, 100, 200), 2, verMolde)
-crearBoton("🔨 3. CONSTRUIR (B)", Color3.fromRGB(200, 120, 0), 3, construirReal)
-crearBoton("🛑 PARAR (X)", Color3.fromRGB(150, 0, 0), 4, detenerTodo)
-crearBoton("♻️ VACIAR MEM (Z)", Color3.fromRGB(80, 80, 80), 5, vaciarMemoria)
-
-tool.Equipped:Connect(function(mouse)
+tool.Equipped:Connect(function(m)
     actualizarListaArchivos()
-    mouse.Button1Down:Connect(function()
-        if mouse.Target then
-            bloqueSeleccionado = mouse.Target
-            highlightBox.Adornee = bloqueSeleccionado
-            notificar("🎯 Base: " .. bloqueSeleccionado.Name)
-        end
-    end)
-    mouse.KeyDown:Connect(function(key)
-        key = key:lower()
-        if key == "k" then copiarEstructura()
-        elseif key == "v" then verMolde()
-        elseif key == "b" then construirReal()
-        elseif key == "x" then detenerTodo()
-        end
-    end)
+    m.Button1Down:Connect(function() if m.Target then bloqueSeleccionado=m.Target; highlightBox.Adornee=m.Target; notificar("🎯 " .. m.Target.Name) end end)
+    m.KeyDown:Connect(function(k) if k=="k" then copiarEstructura() elseif k=="b" then construirReal() elseif k=="x" then detenerTodo() end end)
 end)
-
-tool.Unequipped:Connect(function() highlightBox.Adornee = nil bloqueSeleccionado = nil end)
+tool.Unequipped:Connect(function() highlightBox.Adornee=nil end)
 actualizarListaArchivos()
-notificar("✅ Script v8 (Hunter Mode)")
+notificar("✅ v15 Listo (Parent.Id)")
